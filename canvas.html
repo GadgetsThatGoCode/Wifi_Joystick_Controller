@@ -1,0 +1,279 @@
+<html>
+<head>
+<style>
+body {
+	font-family: "Karla", "HelveticaNeue", "Helvetica Neue", sans-serif;
+}
+#container {
+	width: 300px;
+	height: 300px;
+	background: #fff;
+	margin: 0px auto;
+}
+#myCanvas {
+	cursor: grab;
+	cursor: move;
+}
+.box {
+	width: 700px;
+	height: 400px;
+	background-color: #fff;
+	position: fixed;
+	margin-left: -350px;
+	/* half of width */
+	margin-top: -200px;
+	/* half of height */
+	top: 50%;
+	left: 50%;
+}
+.example {
+	color: #ccc;
+}
+td {
+	vertical-align: top;
+	text-align: center;
+}
+input, textarea, select {
+	background-color: #f4f4f4;
+	color: #333;
+	border: 0;
+	max-width: 100%;
+	padding: 13px 15px;
+	font-size: 16px;
+	color: #666;
+	line-height: 1.375;
+	margin-bottom: 8px;
+}
+.title {
+	font-family: "Unica One", "HelveticaNeue", "Helvetica Neue", sans-serif;
+}
+</style>
+	
+<meta content="width=device-width, height=device-height" name="viewport">
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script>
+	const timegap = 250;
+	var ipValue;
+	var connection;
+	connection.onopen = function() {
+		connection.send('ping');
+	};
+	connection.onerror = function(error) {
+		console.log('WebSocket Error ', error);
+	};
+	connection.onmessage = function(e) {
+		console.log('Server: ', e.data);
+	};
+
+	function mod() {
+		var text = document.getElementById('ip').value;
+		ipValue = text;
+		connection = new WebSocket(ipValue, ['arduino']);
+		console.log("IP value changed to:" + ipValue);
+	}
+
+	function showPos() {
+		window.addEventListener('deviceorientation', function(event) {
+			var xSend = (((event.alpha) * (255 / 360)).toFixed(0));
+			document.form1.x.value = xSend;
+		});
+	}
+
+	function sendPos() {
+		var send = "p" + document.form1.motora.value + "," + document.form1.motorb.value;
+		console.log(send);
+		connection.send(send);
+	} 
+</script>
+<title>Gadgets That Go Joystick Controller</title>
+</head>
+<body style="height=100%; width=100%; background-color:#fff">
+<table class="box" style="width:700px">
+<tr>
+<td width="350px">
+<input id="ip" onchange="mod()" type="text"><br>
+<span class="example">Example: ws://192.168.2.5:81/</span>
+
+<form id="form1" name="form1">
+<input id="positionx" name="x" type="hidden"><input id="newx" name="newx" type="hidden"><input id="power" name="a" type="hidden"> <input id="motora" name="motora" type="hidden"><br>
+<input id="positiony" name="y" type="hidden"><input id="newy" name="newy" type="hidden"><input id="difference" name="b" type="hidden"> <input id="motorb" name="motorb" type="hidden"><br>
+<br>
+</form>
+
+<div id="container"><canvas id="myCanvas" width="300" height="300"></canvas></div>
+</td>
+
+<td width="350px"><img alt="Gadgets That Go" height="150px" src="C:/GTG_final_logo.png" style="margin:-25px 75px -25px;" width="150px"> <span class="title">GADGETS THAT GO<br>
+Joystick Controller</span></td>
+</tr>
+</table>
+<script> 
+document.getElementById("positionx").value = 150;
+document.getElementById("positiony").value = 150;
+
+function pointInCircle(x, y, cx, cy, radius) {
+	var distancesquared = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+	return distancesquared <= radius * radius;
+}
+var myVar = setInterval(function() {
+	sendPos()
+}, 500); //TODO add if(connected)
+var c = document.getElementById("myCanvas");
+var ctx = c.getContext("2d");
+ctx.beginPath();
+ctx.arc(150, 150, 125, 0, 2 * Math.PI);
+ctx.lineWidth = 3;
+ctx.stroke();
+var c = document.getElementById("myCanvas");
+var ctx = c.getContext("2d");
+ctx.beginPath();
+ctx.arc(150, 150, 35, 0, 2 * Math.PI);
+ctx.fillStyle = '#8ED6FF';
+ctx.fill();
+ctx.lineWidth = 3;
+ctx.stroke();
+
+function writeMessage(messagex, messagey) {
+	document.getElementById("positionx").value = messagex;
+	document.getElementById("positiony").value = messagey;
+	var a = 150 - messagex;
+	var b = 150 - messagey;
+	var powera = Math.ceil(Math.sqrt((a * a) + (b * b)));
+	if (powera > 100) {
+		powera = 100;
+	}
+	if (messagex > 150) { //left or right steering power differential
+		//move to right - motor A (motor to left overpower)
+		var difference = (messagex - 150) / 100;
+		if (difference < .05) {
+			difference = 0.0;
+		}
+		document.getElementById("difference").value = "r" + difference;
+	}
+	if (messagex < 149) { //left or right steering power differential
+		//move to left - motor B (motor to right overpower)
+		var difference = (150 - messagex) / 100;
+		if (difference < .05) {
+			difference = 0.0;
+		}
+		document.getElementById("difference").value = "l" + difference;
+	}
+	if (messagey <= 150) { //motor to signal move in forward
+		document.getElementById("power").value = "f" + powera;
+	}
+	if (messagey > 150) { //motor to signal move in reverse
+		document.getElementById("power").value = "r" + powera;
+	}
+	setMotorData();
+}
+
+function setMotorData() {
+	var motorADir;
+	var motorAPwr;
+	var motorBDir;
+	var motorBPwr;
+	var opposedDirection;
+	var power = document.getElementById("power").value;
+	var difference = document.getElementById("difference").value;
+	var numPower = power.substring(1, power.length);
+	var differencePower = difference.substring(1, difference.length);
+	var startDirection = power.substring(0, 1);
+	var overPowerSide = difference.substring(0, 1);
+	if (startDirection == "f") {
+		opposedDirection = "r";
+	} else {
+		opposedDirection = "f";
+	}
+	if (overPowerSide == "r") {
+		motorAPwr = numPower;
+		motorADir = startDirection;
+		//figure motor B pwr direction
+		if (differencePower > .5) {
+			motorBDir = opposedDirection;
+			motorBPwr = differencePower * numPower;
+		} else {
+			motorBDir = startDirection;
+			motorBPwr = numPower - (differencePower * numPower);
+		}
+	}
+	if (overPowerSide == "l") {
+		motorBPwr = numPower;
+		motorBDir = startDirection;
+		//figure motor A pwr direction
+		if (differencePower > .5) {
+			motorADir = opposedDirection;
+			motorAPwr = differencePower * numPower;
+		} else {
+			motorADir = startDirection;
+			motorAPwr = numPower - (differencePower * numPower);
+		}
+	}
+	document.getElementById("motora").value = motorADir + Math.ceil(motorAPwr);
+	document.getElementById("motorb").value = motorBDir + Math.ceil(motorBPwr);
+}
+
+function getMousePos(canvas, evt) {
+	var rect = canvas.getBoundingClientRect();
+	return {
+		x: evt.clientX - rect.left,
+		y: evt.clientY - rect.top
+	};
+}
+var canvas = document.getElementById('myCanvas');
+var context = canvas.getContext('2d');
+canvas.addEventListener('mousemove', function(evt) {
+	var mousePos = getMousePos(canvas, evt);
+	var messagex = mousePos.x;
+	var messagey = mousePos.y;
+	if (pointInCircle(messagex, messagey, 150, 150, 100)) {
+		writeMessage(messagex, messagey);
+		window.requestAnimationFrame(draw);
+	}
+	if (!pointInCircle(messagex, messagey, 150, 150, 100)) {
+		var ctx = document.getElementById('myCanvas').getContext('2d');
+		var angleRadians = Math.atan2(messagey - 150, messagex - 150);
+		var x = Math.floor(150 + 100 * Math.cos(angleRadians));
+		var y = Math.floor(150 + 100 * Math.sin(angleRadians));
+		document.getElementById("newx").value = x;
+		document.getElementById("newy").value = y;
+		writeMessage(x, y);
+		window.requestAnimationFrame(drawTwo);
+	}
+}, false);
+
+function draw() {
+	var ctx = document.getElementById('myCanvas').getContext('2d');
+	var positionx = document.getElementById('positionx').value;
+	var positiony = document.getElementById('positiony').value;
+	ctx.clearRect(0, 0, 300, 300); // clear canvas
+	ctx.beginPath();
+	ctx.arc(150, 150, 125, 0, 2 * Math.PI);
+	ctx.lineWidth = 3;
+	ctx.stroke();
+	ctx.beginPath();
+	ctx.arc(positionx, positiony, 35, 0, 2 * Math.PI);
+	ctx.fillStyle = '#8ED6FF';
+	ctx.fill();
+	ctx.lineWidth = 3;
+	ctx.stroke();
+}
+
+function drawTwo() {
+	var ctx = document.getElementById('myCanvas').getContext('2d');
+	var positionx = document.getElementById('newx').value;
+	var positiony = document.getElementById('newy').value;
+	ctx.clearRect(0, 0, 300, 300); // clear canvas 
+	ctx.beginPath();
+	ctx.arc(150, 150, 125, 0, 2 * Math.PI);
+	ctx.lineWidth = 3;
+	ctx.stroke();
+	ctx.beginPath();
+	ctx.arc(positionx, positiony, 35, 0, 2 * Math.PI);
+	ctx.fillStyle = '#8ED6FF';
+	ctx.fill();
+	ctx.lineWidth = 3;
+	ctx.stroke();
+} 
+</script>
+</body>
+</html>
